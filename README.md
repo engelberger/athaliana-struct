@@ -54,43 +54,162 @@ To run this script, you'll need:
 - Access to uniprot and AlphaFold databases.
 - Python's `requests` and `os` libraries
 
-## Implementation
+# Implementation
 
-The script comprises two main Python classes: `A_thaliana_Protein` and `AF2_Structure`.
+Class Documentation
 
-### Class 1: A_thaliana_Protein
+## 1. A_thaliana_Protein
 
-This class is utilized to fetch protein sequences based on the protein's uniprot_id.
+### Usage:
 
-#### Methods
+```python
+protein = A_thaliana_Protein(uniprot_id)
+```
 
-1. `__init__(self, uniprot_id)`: Initializes the protein object. The protein's sequence is downloaded upon object initialization by passing the uniprot_id.
+The `A_thaliana_Protein` class represents a protein object from the specie *A. thaliana*.
 
-2. `download_sequence(self)`: Downloads the protein's sequence from Uniprot and returns the sequence as a string. The URL is constructed using the input uniprot_id.
+- **Attributes**:
 
-    Example usage:
-    ```python
-    protein = A_thaliana_Protein('YOUR_UNIPROT_ID')
-    ```
+    - `uniprot_id (str)`: The ID of the protein sequence from UniProt Database.
+    - `sequence (str)`: The protein sequence downloaded from the UniProt API.
 
-### Class 2: AF2_Structure
+- **Methods**:
 
-This class is utilized to download protein structures corresponding to the PDB id.
+    - `_download_sequence() -> str`:
+        Privately called to download sequence from UniProt API and return as a string.
 
-#### Methods:
+- **Example**:
 
-1. `__init__(self, pdb_id, download_dir)`: Initializes the structure object. The user must provide the `pdb_id` and the directory `download_dir` where the structure will be saved.
+```python
+protein = A_thaliana_Protein('Q8WZ42')
+print(protein.sequence)
+```
 
-2. `download_structure(self)`: Downloads the protein structure and saves it in the directory defined during the object's initialization. The structure file will have the `.pdb` extension.
+---
 
-    Example usage:
-    ```python
-    structure = AF2_Structure('YOUR_PDB_ID', 'your_download_directory')
-    structure.download_structure()
-    ```
+## 2. AF2_Structure
 
-## Testing and Debugging
+### Usage:
 
-For testing and debugging purposes, you can utilize print statements or Python's built-in debugger, pdb.
+```python
+structure = AF2_Structure(pdb_id, download_dir)
+```
 
-This script may throw exceptions if the URLs constructed for downloading do not lead to valid resources. Therefore, ensure the uniprot_ids and pdb_ids provided are correct.
+The `AF2_Structure` class represents a structure object in AlphaFold 2 (AF2) Database.
+
+- **Attributes**:
+
+    - `pdb_id (str)`: The ID of the protein structure from Protein Data Bank (PDB).
+    - `download_dir (str)`: The directory where to save the downloaded structure.
+
+- **Methods**:
+
+    - `_download_structure() -> str`:
+        Privately called to download protein structure from AF2 API and save to `download_dir`. Returns the file path of the downloaded structure.
+
+- **Example**:
+
+```python
+structure = AF2_Structure('6LU7', '/path/to/your/directory')
+file_path = structure.download_structure()
+print(file_path)
+```
+
+---
+
+## 3. ProteinCompleteness
+
+### Usage:
+
+```python
+content = Protein_Completeness(pdb_protein_sequence, uniprot_sequence)
+```
+
+The `ProteinCompleteness` class represents an operational object for determining protein completeness.
+
+- **Attributes**:
+
+    - `pdb_protein_sequence (str)`: The sequence string of the protein from PDB.
+    - `uniprot_sequence (str)`: The sequence string of the protein from UniProt.
+
+- **Methods**:
+
+    - `completeness_check(completeness_threshold: float) -> bool`:
+        Calculates the completeness percentage of `pdb_protein_sequence` with respect to `uniprot_sequence` and returns whether it satisfies the `completeness_threshold`.
+
+- **Example**:
+
+```python
+content = ProteinCompleteness('ACTG...', 'ACGTG...')
+is_complete = content.completeness_check(50)
+print(is_complete)
+```
+
+---
+
+## 4. SequenceSimilarity
+
+### Usage:
+
+```python
+similarity = SequenceSimilarity(protein_sequence1, protein_sequence2)
+```
+
+The `SequenceSimilarity` class is an operational object to determine the similarity between two protein sequences.
+
+- **Attributes**:
+
+    - `protein_sequence1 (str)`: The first protein sequence string for comparison.
+    - `protein_sequence2 (str)`: The second protein sequence string for comparison.
+
+- **Methods**:
+
+    - `calculate_similarity(similarity_threshold: float) -> bool`:
+        Calculates the sequence similarity between `protein_sequence1` and `protein_sequence2` and returns whether it satisfies the `similarity_threshold`.
+
+- **Example**:
+
+```python
+similarity = SequenceSimilarity('ACTG...', 'ACGTG...')
+is_similar = similarity.calculate_similarity(99)
+print(is_similar)
+```
+
+## 5. PDBJsonParser
+
+### Usage:
+
+```python
+parser = PDBJsonParser(json_file)
+```
+
+The `PDBJsonParser` class used to parse the JSON data from a local JSON file which contains PDB data.
+
+- **Attributes**:
+
+    - `json_file (str)`: The path to the JSON file.
+    - `data (dict)`: Parsed JSON data. Initialized when the object is created.
+
+- **Methods**:
+
+    - `load_json() -> dict`: A private method called at initialization to parse and load JSON data from the provided `json_file`.
+    
+    - `extract_info() -> list`: Extracts key information from the JSON data and returns a list of dictionary objects. Each dictionary contains information of a protein.
+
+- **Example**:
+
+```python
+parser = PDBJsonParser('path_to_your_json_file.json')
+parsed_data = parser.extract_info()
+print(parsed_data)
+```
+
+---
+
+These classes are designed to facilitate the process of downloading and analyzing the protein data. Their functionality simplifies the Protein Data Bank and UniProt data extraction, protein completeness checking, and protein sequence similarity calculation.
+
+The classes can be used in harmonious combination to download protein sequences, analyze completeness, and compare sequence similarities, saving considerable time and increasing code readability and accessibility.
+
+
+
+
