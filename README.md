@@ -1,3 +1,44 @@
+# A. thaliana Protein Structure Prediction Using AlphaFold
+
+## Objective
+The main aim is to use AlphaFold predictions to analyze a dataset of proteins from A. thaliana, aiming at a large-scale prediction and scoring process of non-synonymous protein variants.
+
+## Description
+This operation will involve the utilization of AlphaFold for the prediction of single-chain protein structures, rather than complex structures, for practical reasons. This approach simplifies calculations and eases the setup.
+
+The process focuses on protein structures with a certain degree of completeness (e.g., 30% or 50% sequence consistency as per UniProt), avoiding the potential waste of resources on smaller fragments from larger proteins. 
+
+Moreover, we propose sequence similarity cut-off (e.g., 99%) to reduce redundancies and elude multiple calculations for the same protein chain.
+
+## Plan and Approach
+1. Acquire the proper proteins: AlphaFold has a pre-computed structure database that should be used for the operation. Based on the information from PDB, we've found 830 proteins related to A. thaliana.
+
+   1. Filter proteins that were made available on or after April 30, 2018, to ensure that they are not part of the AlphaFold's training set.
+
+   2. Obtain single chain proteins over complexes to simplify the study.
+
+   3. Choose proteins where the PDBs is a representation of a certain threshold of the entire protein, avoiding fragments.
+
+   4. Eliminate any redundant protein chains with a sequence similarity cut-off.
+
+2. Implement and run AlphaFold: Utilizing the acquired, filtered proteins as input, AlphaFold will then predict the protein structures.
+
+3. Scoring and Analysis: Compare predicted structures with actual structures where they are available. Utilize the standard methods for comparing predicted and empirical structures.
+
+The ultimate goal is to demonstrate the effectiveness of AlphaFold for protein-structure prediction specifically for A. thaliana proteins.  The output can be used for further research in the functional analysis for A. thaliana, or as a part of bioinformatic research on plant proteins. Overall, it will allow us to understand AlphaFold's performance when given a large-scale task on A. thaliana proteins, establishing a foundation for future research on similar topics.
+
+## Milestones
+1. Selection and download of relevant proteins from the pre computed AF2 database
+
+2. Implementation of AlphaFold and generation of protein structure predictions
+
+3. Comparison of predicted and actual structures to assess the success and reliability of AlphaFold predictions.
+
+4. Comprehensive analysis and documentation of findings
+
+With the plan and milestones clearly laid out, the prediction of the large-scale A. thaliana protein variants can be accomplished efficiently and in an organized manner.
+
+
 # Protein Processing and Downloading Documentation
 
 This Python script is designed for processing and downloading protein sequences and structures for the A. thaliana plant.
