@@ -6,6 +6,8 @@ import requests
 import os
 import json
 
+#test
+
 
 class A_thaliana_Protein:
     def __init__(self, uniprot_id):
