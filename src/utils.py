@@ -5,18 +5,20 @@ from Bio.SubsMat.MatrixInfo import blosum62
 import requests
 import os
 import json
+from collections import Counter
 
-#test
+
+# test
 
 
 class A_thaliana_Protein:
     def __init__(self, uniprot_id):
         self.uniprot_id = uniprot_id
         self.sequence = self.download_sequence()
-  
+
     def download_sequence(self):
         """Download sequence from uniprot and return sequence as string"""
-        url = f'https://www.uniprot.org/uniprot/{self.uniprot_id}.fasta'
+        url = f"https://www.uniprot.org/uniprot/{self.uniprot_id}.fasta"
         response = requests.get(url)
         sequence = "".join(response.text.split("\n")[1:])
         return sequence
@@ -26,19 +28,17 @@ class AF2_Structure:
     def __init__(self, pdb_id, download_dir):
         self.pdb_id = pdb_id
         self.download_dir = download_dir
-  
+
     def download_structure(self):
         """Download structure and save to download_dir"""
-        url = f'https://alphafold.ebi.ac.uk/entry/{self.pdb_id}'
-        response = requests.get(url) 
-        filename = os.path.join(self.download_dir, f'{self.pdb_id}.pdb')
-        
-        with open(filename, 'w') as file:
+        url = f"https://alphafold.ebi.ac.uk/entry/{self.pdb_id}"
+        response = requests.get(url)
+        filename = os.path.join(self.download_dir, f"{self.pdb_id}.pdb")
+
+        with open(filename, "w") as file:
             file.write(response.text)
 
         return filename
-
-
 
 
 class ProteinCompleteness:
@@ -51,7 +51,7 @@ class ProteinCompleteness:
         uniprot_length = len(self.uniprot_sequence)
 
         completeness = (pdb_length / uniprot_length) * 100
-        
+
         if completeness >= completeness_threshold:
             return True
         else:
@@ -64,64 +64,127 @@ class SequenceSimilarity:
         self.protein_sequence2 = protein_sequence2
 
     def calculate_similarity(self, similarity_threshold):
-        alignment = align.globalds(self.protein_sequence1, self.protein_sequence2, blosum62, -10, -0.5)
+        alignment = align.globalds(
+            self.protein_sequence1, self.protein_sequence2, blosum62, -10, -0.5
+        )
 
         aligned_sequence1 = alignment[0][0]
         aligned_sequence2 = alignment[0][1]
 
-        matches = sum([1 for i, j in zip(aligned_sequence1, aligned_sequence2) if i == j])
+        matches = sum(
+            [1 for i, j in zip(aligned_sequence1, aligned_sequence2) if i == j]
+        )
         total_length = max(len(self.protein_sequence1), len(self.protein_sequence2))
 
         similarity = (matches / total_length) * 100
-        
+
         if similarity >= similarity_threshold:
             return True
         else:
             return False
 
-# For ProteinCompleteness
-#pro_com = ProteinCompleteness(pdb_protein_sequence, uniprot_sequence)
-#print(f'Protein Completeness: {pro_com.completeness_check(50)}')
-
-# For SequenceSimilarity
-#seq_sim = SequenceSimilarity(protein_sequence1, protein_sequence2)
-#print(f'Sequence Similarity: {seq_sim.calculate_similarity(99)}')
 
 class PDBJsonParser:
     def __init__(self, json_file):
         self.json_file = json_file
-        self.data = self.load_json()
-        
-    def load_json(self):
+
+    def parse_json(self):
         with open(self.json_file) as file:
             data = json.load(file)
-        return data
-
-    def extract_info(self):
         result = []
-        for protein in self.data:
-            protein_info = {}
-            protein_info['identifier'] = protein.get('identifier')
-            protein_info['deposit_date'] = protein.get('data', {}).get('rcsb_accession_info', {}).get('deposit_date')
-            protein_info['initial_release_date'] = protein.get('data', {}).get('rcsb_accession_info', {}).get('initial_release_date')
-            protein_info['entry_id'] = protein.get('data', {}).get('rcsb_entry_container_identifiers', {}).get('entry_id')
-            protein_info['title'] = protein.get('data', {}).get('struct', {}).get('title')
-            protein_info['polymer_entities'] = []
+        for entry in data:
+            pdb_id = entry.get("identifier", "Not provided")
+            rcsb_id = entry.get("data", {}).get("rcsb_id", "Not provided")
+            rcsb_accession = (
+                entry.get("data", {})
+                .get("rcsb_accession_info", {})
+                .get("deposit_date", "Not provided")
+            )
+            initial_release = (
+                entry.get("data", {})
+                .get("rcsb_accession_info", {})
+                .get("initial_release_date", "Not provided")
+            )
+            title = entry.get("data", {}).get("struct", {}).get("title", "Not provided")
 
-            for poly in protein.get('data', {}).get('polymer_entities', []):
-                pol_info = {}
-                pol_info['sequence'] = poly.get('entity_poly', {}).get('pdbx_seq_one_letter_code_can')
-                pol_info['organism'] = poly.get('rcsb_entity_source_organism', [{}])[0].get('ncbi_scientific_name')
-                pol_info['entity_id'] = poly.get('rcsb_polymer_entity_container_identifiers', {}).get('entity_id')
-                reference_sequence = poly.get('rcsb_polymer_entity_container_identifiers', {}).get('reference_sequence_identifiers', [{}])
-                pol_info['database_accession'] = reference_sequence[0].get('database_accession')
-                pol_info['database_name'] = reference_sequence[0].get('database_name')
-                protein_info['polymer_entities'].append(pol_info)
+            polymer_entities = entry.get("data", {}).get("polymer_entities", [])
+            for entity in polymer_entities:
+                entity_id = entity.get(
+                    "rcsb_polymer_entity_container_identifiers", {}
+                ).get("entity_id", "Not provided")
+                sequence = entity.get("entity_poly", {}).get(
+                    "pdbx_seq_one_letter_code_can", "Not provided"
+                )
+                scientific_name = entity.get("rcsb_entity_source_organism", [{}])[
+                    0
+                ].get("ncbi_scientific_name", "Not provided")
 
-            result.append(protein_info)
-
+                identifiers = entity.get(
+                    "rcsb_polymer_entity_container_identifiers", {}
+                ).get("reference_sequence_identifiers", None)
+                if identifiers:
+                    database_accession = identifiers[0].get(
+                        "database_accession", "Not found"
+                    )
+                    database_name = identifiers[0].get("database_name", "Not found")
+                else:
+                    database_accession = "Not found"
+                    database_name = "Not found"
+                if (
+                    scientific_name == "Arabidopsis thaliana"
+                    and database_accession != "Not found"
+                    and database_name != "Not found"
+                ):
+                    result.append(
+                        {
+                            "pdb_id": pdb_id,
+                            "rcsb_id": rcsb_id,
+                            "rcsb_accession": rcsb_accession,
+                            "initial_release": initial_release,
+                            "title": title,
+                            "entity_id": entity_id,
+                            "sequence": sequence,
+                            "scientific_name": scientific_name,
+                            "database_accession": database_accession,
+                            "database_name": database_name,
+                        }
+                    )
         return result
 
-# Usage
-#parser = PDBJsonParser('path_to_your_json_file.json')
-#parsed_data = parser.extract_info()
+    def save_to_markdown(self, output_file="summary.md"):
+        parsed_data = self.parse_json()
+        with open(output_file, "w") as md_file:
+            for entry in parsed_data:
+                md_file.write(f"## PDB ID: {entry['pdb_id']}\n")
+                md_file.write(f"RCSB ID: {entry['rcsb_id']}\n")
+                md_file.write(f"RCSB Accession: {entry['rcsb_accession']}\n")
+                md_file.write(f"Initial Release: {entry['initial_release']}\n")
+                md_file.write(f"Title: {entry['title']}\n")
+                md_file.write(f"Entity ID: {entry['entity_id']}\n")
+                md_file.write(f"Sequence: {entry['sequence']}\n")
+                md_file.write(f"Scientific Name: {entry['scientific_name']}\n")
+                md_file.write(f"Database Accession: {entry['database_accession']}\n")
+                md_file.write(f"Database Name: {entry['database_name']}\n\n")
+        print(f"Data has been saved to {output_file}")
+
+    def get_repeated_database_accessions(self):
+        data = self.parse_json()
+        database_accessions = [entry["database_accession"] for entry in data]
+        counter = Counter(database_accessions)
+        repeated_accessions = {
+            accession: count for accession, count in counter.items() if count > 1
+        }
+        return repeated_accessions
+
+    def get_unique_database_accessions(self):
+        """
+        Return a dictionary of unique database accessions and their sequences
+
+        """
+        data = self.parse_json()
+        unique_accessions = {}
+        for entry in data:
+            accession = entry["database_accession"]
+            if accession not in unique_accessions:
+                unique_accessions[accession] = entry["sequence"]
+        return unique_accessions
