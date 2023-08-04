@@ -31,7 +31,8 @@ class AF2_Structure:
 
     def download_structure(self):
         """Download structure and save to download_dir"""
-        url = f"https://alphafold.ebi.ac.uk/entry/{self.pdb_id}"
+        # Example https://alphafold.ebi.ac.uk/files/AF-Q8W3K0-F1-model_v4.pdb
+        url = f"https://alphafold.ebi.ac.uk/files/AF-{self.pdb_id}-F1-model_v4.pdb"
         response = requests.get(url)
         filename = os.path.join(self.download_dir, f"{self.pdb_id}.pdb")
 
@@ -188,3 +189,32 @@ class PDBJsonParser:
             if accession not in unique_accessions:
                 unique_accessions[accession] = entry["sequence"]
         return unique_accessions
+
+
+class AF2ProteinDownloader:
+    def __init__(self, data_dir="../outputs"):
+        self.data_dir = data_dir
+        self.pdb_dir = os.path.join(self.data_dir, "pdb")
+        self.fasta_dir = os.path.join(self.data_dir, "fasta")
+
+        # Create required directories if they don't exist
+        if not os.path.exists(self.pdb_dir):
+            os.makedirs(self.pdb_dir)
+        if not os.path.exists(self.fasta_dir):
+            os.makedirs(self.fasta_dir)
+
+    def download_pdb(self, pdb_id):
+        """Download PDB from AF2 and save to self.pdb_dir"""
+        pdb = AF2_Structure(pdb_id, self.pdb_dir)
+        pdb.download_structure()
+
+    def download_fasta(self, uniprot_id):
+        """Download sequence from uniprot and save to self.fasta_dir"""
+        protein = A_thaliana_Protein(uniprot_id)
+        sequence = protein.sequence
+        filename = os.path.join(self.fasta_dir, f"{uniprot_id}.fasta")
+
+        with open(filename, "w") as file:
+            file.write(sequence)
+
+        return filename
