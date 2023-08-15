@@ -1,7 +1,3 @@
-from Bio import SeqIO
-from Bio.SeqUtils.ProtParam import ProteinAnalysis
-from Bio.pairwise2 import align, format_alignment
-from Bio.SubsMat.MatrixInfo import blosum62
 import requests
 import os
 import json
@@ -40,6 +36,17 @@ class AF2_Structure:
             file.write(response.text)
 
         return filename
+
+
+class RCSB_Structure:
+    def __init__(self, pdb_id, download_dir):
+        self.pdb_id = pdb_id
+        self.download_dir = download_dir
+
+    def download_structure(self):
+        """Download structure from RCSB and save to download_dir"""
+        pass
+        #
 
 
 class ProteinCompleteness:
@@ -179,7 +186,7 @@ class PDBJsonParser:
 
     def get_unique_database_accessions(self):
         """
-        Return a dictionary of unique database accessions and their sequences
+        Return a dictionary of unique database accessions, their sequences and corresponding PDB ID
 
         """
         data = self.parse_json()
@@ -187,14 +194,18 @@ class PDBJsonParser:
         for entry in data:
             accession = entry["database_accession"]
             if accession not in unique_accessions:
-                unique_accessions[accession] = entry["sequence"]
+                unique_accessions[accession] = {
+                    "sequence": entry["sequence"],
+                    "pdb_id": entry["pdb_id"],
+                }
         return unique_accessions
 
 
 class AF2ProteinDownloader:
     def __init__(self, data_dir="../outputs"):
         self.data_dir = data_dir
-        self.pdb_dir = os.path.join(self.data_dir, "pdb")
+        self.pdb_dir_af2 = os.path.join(self.data_dir, "pdb_af2")
+        self.pdb_dir_rcsb = os.path.join(self.data_dir, "pdb_rcsb")
         self.fasta_dir = os.path.join(self.data_dir, "fasta")
 
         # Create required directories if they don't exist
@@ -202,6 +213,19 @@ class AF2ProteinDownloader:
             os.makedirs(self.pdb_dir)
         if not os.path.exists(self.fasta_dir):
             os.makedirs(self.fasta_dir)
+        if not os.path.exists(self.pdb_dir_rcsb):
+            os.makedirs(self.pdb_dir_rcsb)
+
+    def download_rcsb_pdb(self, pdb_id):
+        """Download PDB from RCSB and save to self.pdb_dir_rcsb"""
+        url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
+        response = requests.get(url)
+        filename = os.path.join(self.pdb_dir_rcsb, f"{pdb_id}.pdb")
+
+        with open(filename, "w") as file:
+            file.write(response.text)
+
+        return filename
 
     def download_pdb(self, pdb_id):
         """Download PDB from AF2 and save to self.pdb_dir"""
@@ -218,3 +242,200 @@ class AF2ProteinDownloader:
             file.write(sequence)
 
         return filename
+
+
+class Protein:
+    """
+    Class for a protein
+        It
+    """
+
+    def __init__(self, uniprot_id: str, pdb_id: str, data_dir: str, sequence_rcsb: str):
+        self.uniprot_id = uniprot_id
+        self.data_dir = data_dir
+        self.protein_dir = os.path.join(data_dir, self.uniprot_id)
+        self.sequence_rcsb = sequence_rcsb
+        self.pdb_id = pdb_id
+        self.af_aligned_sequence = None
+        self.rcsb_aligned_sequence = None
+        self.date_uploaded_rcsb = None
+        self.uniprot_first_deposited_pdb = None
+        self.matchmaker_dict = None
+        self.chimerax_path = "chimerax"
+        os.makedirs(self.protein_dir, exist_ok=True)
+
+    @property
+    def sequence_uniprot(self):
+        filename = os.path.join(self.protein_dir, f"{self.uniprot_id}.fasta")
+        if os.path.exists(filename):
+            with open(filename) as file:
+                return file.read()
+        else:
+            return self.download_sequence()
+
+    def download_sequence(self, source: str):
+        if source == "uniprot":
+            url = f"https://www.uniprot.org/uniprot/{self.uniprot_id}.fasta"
+            response = requests.get(url)
+            sequence = "".join(response.text.split("\n")[1:])
+            filename = os.path.join(self.protein_dir, f"{self.uniprot_id}.fasta")
+            with open(filename, "w") as file:
+                file.write(sequence)
+            return sequence
+        elif source == "RCSB":
+            # https://www.rcsb.org/fasta/entry/
+            url = f"https://www.rcsb.org/fasta/entry/{self.pdb_id}"
+
+    @property
+    def pdb_structures(self):
+        filename = os.path.join(self.protein_dir, f"{self.uniprot_id}_PDB.json")
+        if os.path.exists(filename):
+            with open(filename) as file:
+                return json.load(file)
+        else:
+            return self.download_pdb_structures()
+
+    def download_pdb_structures(self, pdb_source):
+        file_path = os.path.join(
+            self.protein_dir, f"{self.uniprot_id}_{pdb_source}.cif"
+        )
+        if not os.path.exists(file_path):
+            if pdb_source == "AF2":
+                url = f"https://alphafold.ebi.ac.uk/files/AF-{self.uniprot_id}-F1-model_v4.cif"
+            elif pdb_source == "RCSB":
+                url = f"https://files.rcsb.org/download/{self.pdb_id}.cif"
+
+            else:
+                raise ValueError(f"Unrecognized pdb_source: {pdb_source}")
+            response = requests.get(url)
+            with open(file_path, "w") as file:
+                file.write(response.text)
+        return file_path
+
+    def calculate_rmsd_chimeraX(self):
+        """
+        Calculate RMSD between AF2 and RCSB structures using ChimeraX
+        """
+        # Download PDB structures
+        af2_pdb_path = self.download_pdb_structures("AF2")
+        rcsb_pdb_path = self.download_pdb_structures("RCSB")
+
+        # If the pdb files exist, calculate RMSD
+        if os.path.exists(af2_pdb_path) and os.path.exists(rcsb_pdb_path):
+            # Calculate RMSD with matchmaker
+            # chimerax --offscreen --script "matchmaker.py --dir /home/iwe30/Remote/nq194gori/github/athaliana-struct/notebooks/proteins_data/P93311 --file_1 P93311_AF2.cif --file_2 P93311_RCSB.cif --output matchmaker_full_P93311.html"
+            cmd = f"{self.chimerax_path} --script '../src/matchmaker.py --dir {self.protein_dir} --file_1 {af2_pdb_path} --file_2 {rcsb_pdb_path} --output matchmaker_full_{self.uniprot_id}.html'"
+            # Save the command to a file
+            with open(
+                os.path.join(self.protein_dir, f"matchmaker_full_{self.uniprot_id}.sh"),
+                "w",
+            ) as file:
+                file.write(cmd)
+
+            # If there is already a matchmaker_full_Q95747.json file, don't calculate RMSD
+            if not os.path.exists(
+                os.path.join(
+                    self.protein_dir, f"matchmaker_full_{self.uniprot_id}.json"
+                )
+            ):
+                # Run command with subprocess
+                import subprocess
+
+                process = subprocess.Popen(
+                    cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
+                stdout, stderr = process.communicate()
+                # If there is an error, print it
+                if stderr:
+                    print(stderr)
+                html_file = os.path.join(
+                    self.protein_dir, f"matchmaker_full_{self.uniprot_id}.html"
+                )
+                from bs4 import BeautifulSoup, NavigableString
+                import json
+
+                # Load html file
+                with open(html_file) as f:
+                    html_doc = f.read()
+
+                # Parse html file
+                soup = BeautifulSoup(html_doc, "html.parser")
+
+                data = {}
+
+                brs = soup.find_all("br")
+
+                lines = [
+                    br.next_sibling
+                    for br in brs
+                    if isinstance(br.next_sibling, NavigableString)
+                ]
+
+                lines = [str(line).strip() for line in lines]
+
+                for i, line in enumerate(lines):
+                    if line.startswith("Matchmaker"):
+                        start = i
+                        break
+
+                end = lines.index("Residues:")
+
+                relevant_lines = lines[start:end]
+
+                for line in relevant_lines:
+                    if "Matchmaker" in line:
+                        chains = line.split(" with ")
+                        data["Chain 1"] = (
+                            chains[0].split(" ")[1].split(",")[0]
+                        )  # keep only the relevant chain ID
+                        data["Chain 2"] = (
+                            chains[1].split(",")[0].strip()
+                        )  # keep only the relevant chain ID
+                        score = line.split("=")[-1].strip()
+                        data["Sequence alignment score"] = float(score)
+
+                    elif "Alignment identifier" in line:
+                        data["Alignment identifier"] = int(line.split(" ")[-1].strip())
+
+                    elif "Chains used in RMSD evaluation" in line:
+                        # Chains used in RMSD evaluation for alignment 1: P93311_AF2.cif #1/A, P93311_RCSB.cif #2/Aa
+                        # Save only the chain IDs ex. A and Aa
+                        chains = line.split(":")[-1].strip().split(",")
+                        data["Chain 1 for RMSD"] = chains[0].split("/")[-1]
+                        data["Chain 2 for RMSD"] = chains[1].split("/")[-1]
+
+                    elif "RMSD between" in line:
+                        rmsd = line.split("is")[1].split(";")[0].strip()
+                        # RMSD between 61 pruned atom pairs is 1.072 angstroms; (across all 96 pairs: 17.267)
+                        data["RMSD pruned"] = float(rmsd.split(" ")[0].strip())
+                        # Save the number of CA atoms used for RMSD pruned
+                        data["Number of CA atoms used for RMSD pruned"] = str(
+                            line.split(" ")[2].strip()
+                        )
+                        all_pairs = line.split(" ")[-1].replace(")", "").strip()
+                        data["RMSD all pairs"] = float(all_pairs)
+                        data["Number of CA atoms used for RMSD all"] = str(
+                            line.split(" ")[-3].strip()
+                        )
+
+                    elif "Sequences:" in line:
+                        seq_num = relevant_lines.index(line)
+                        seq1 = relevant_lines[seq_num + 1].split(" ", 1)
+                        seq2 = relevant_lines[seq_num + 2].split(" ", 1)
+                        # Removing string "Chain A" by splitting and join remaining sequence back
+                        # Same thing applied for sequence 2
+                        seq1_clean = " ".join(seq1[1].split())
+                        seq2_clean = " ".join(seq2[1].split())
+                        data["Sequence 1"] = seq1_clean.split(" ")[-1]
+                        data["Sequence 2"] = seq2_clean.split(" ")[-1]
+
+                self.matchmaker_dict = data
+                # Save it to json file
+                with open(
+                    os.path.join(
+                        self.protein_dir, f"matchmaker_full_{self.uniprot_id}.json"
+                    ),
+                    "w",
+                ) as fp:
+                    json.dump(data, fp)
+                return data
