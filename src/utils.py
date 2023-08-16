@@ -304,18 +304,43 @@ class Protein:
                 url = f"https://alphafold.ebi.ac.uk/files/AF-{self.uniprot_id}-F1-model_v4.cif"
             elif pdb_source == "RCSB":
                 url = f"https://files.rcsb.org/download/{self.pdb_id}.cif"
-
             else:
                 raise ValueError(f"Unrecognized pdb_source: {pdb_source}")
             response = requests.get(url)
+            # Wait 1 second before retrying
+            import time
+
+            time.sleep(1)
+            # Check if the response is valid
+            if response.status_code != 200:
+                error_log = "download_error.log"
+                with open(error_log, "w") as file:
+                    file.write(
+                        f"Error downloading PDB structure {self.pdb_id} from {pdb_source}\n"
+                    )
+                    file.write(response.text)
+                raise ValueError(
+                    f"Error downloading PDB structure {self.pdb_id} from {pdb_source}"
+                )
+
             with open(file_path, "w") as file:
                 file.write(response.text)
+            # Check if the file exists or is empty
+            if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                # Write error log
+                error_log = "download_error.log"
+                with open(error_log, "a") as file:
+                    file.write(f"File {self.pdb_id} not created or is empty\n")
+                raise ValueError("File not created or is empty")
+
         return file_path
 
     def calculate_rmsd_chimeraX(self):
         """
         Calculate RMSD between AF2 and RCSB structures using ChimeraX
         """
+        import json
+
         # Download PDB structures
         af2_pdb_path = self.download_pdb_structures("AF2")
         rcsb_pdb_path = self.download_pdb_structures("RCSB")
@@ -439,3 +464,13 @@ class Protein:
                 ) as fp:
                     json.dump(data, fp)
                 return data
+            else:
+                # Load json file if it exists
+                with open(
+                    os.path.join(
+                        self.protein_dir, f"matchmaker_full_{self.uniprot_id}.json"
+                    ),
+                    "r",
+                ) as fp:
+                    data = json.load(fp)
+                    return data
