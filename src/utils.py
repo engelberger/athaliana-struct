@@ -264,14 +264,24 @@ class Protein:
         self.chimerax_path = "chimerax"
         os.makedirs(self.protein_dir, exist_ok=True)
 
-    @property
+    
     def sequence_uniprot(self):
         filename = os.path.join(self.protein_dir, f"{self.uniprot_id}.fasta")
         if os.path.exists(filename):
             with open(filename) as file:
                 return file.read()
         else:
-            return self.download_sequence()
+            return self.download_sequence("uniprot")
+    
+    def sequence_af2(self):
+        filename = os.path.join(self.protein_dir, f"{self.uniprot_id}_AF2.fasta")
+        if os.path.exists(filename):
+            # If the file is not empty
+            if os.path.getsize(filename) > 0:
+                with open(filename) as file:
+                    return file.read()
+        else:
+            return self.download_sequence("AF2")
 
     def download_sequence(self, source: str):
         if source == "uniprot":
@@ -280,11 +290,71 @@ class Protein:
             sequence = "".join(response.text.split("\n")[1:])
             filename = os.path.join(self.protein_dir, f"{self.uniprot_id}.fasta")
             with open(filename, "w") as file:
+                file.write(f">{self.uniprot_id}\n")
                 file.write(sequence)
             return sequence
         elif source == "RCSB":
             # https://www.rcsb.org/fasta/entry/
             url = f"https://www.rcsb.org/fasta/entry/{self.pdb_id}"
+        elif source == "AF2":
+            url = f"https://alphafold.ebi.ac.uk/files/AF-{self.uniprot_id}-F1-model_v4.fasta"
+            
+            response = requests.get(url)
+            print(response.text)
+            if response.status_code == 200:                
+                sequence = "".join(response.text.split("\n")[1:])
+                filename = os.path.join(self.protein_dir, f"{self.uniprot_id}_{source}.fasta")
+                with open(filename, "w") as file:
+                    file.write(sequence)
+                return sequence
+        
+
+    def predict_structure_with_esm(self, fasta_file, pdb_folder, model_dir=None, num_recycles=None, 
+                                   max_tokens_per_batch=None, chunk_size=None, cpu_only=False, cpu_offload=False):
+        # esm-fold command path
+        esm_fold_command = "/home/sc.uni-leipzig.de/nq194gori/micromamba/envs/esmfold/bin/esm-fold"
+
+        # assemble the command
+        cmd = [esm_fold_command, "-i", fasta_file, "-o", pdb_folder]
+
+        # Add additional options if provided
+        if model_dir is not None:
+            cmd += ["-m", model_dir]
+        if num_recycles is not None:
+            cmd += ["--num-recycles", str(num_recycles)]
+        if max_tokens_per_batch is not None:
+            cmd += ["--max-tokens-per-batch", str(max_tokens_per_batch)]
+        if chunk_size is not None:
+            cmd += ["--chunk-size", str(chunk_size)]
+        if cpu_only:
+            cmd.append("--cpu-only")
+        if cpu_offload:
+            cmd.append("--cpu-offload")
+
+        # Run the command and capture output
+        import subprocess
+        print(cmd)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        print(stdout.decode('utf-8'))
+        print(stderr.decode('utf-8'))
+        if process.returncode != 0:
+            raise OSError(f"Command failed: {cmd}, error: {stderr.decode('utf-8')}")
+
+        # create the pdb file path
+        pdb_file = os.path.join(pdb_folder, f"{self.uniprot_id}.pdb")
+        # Load the pdb file (if exists)
+        if not os.path.exists(pdb_file):
+            raise FileNotFoundError(f"PDB file not found: {pdb_file}")
+        import shutil
+        # Move and rename the pdb file to the protein directory
+        shutil.move(pdb_file, os.path.join(self.protein_dir, f"{self.uniprot_id}_ESM.pdb"))
+        # update the pdb file path
+        pdb_file = os.path.join(self.protein_dir, f"{self.uniprot_id}_ESM.pdb")
+        # Remove the pdb folder
+        shutil.rmtree(pdb_folder)
+        # Return the path of the pdb file
+        return pdb_file
 
     @property
     def pdb_structures(self):
