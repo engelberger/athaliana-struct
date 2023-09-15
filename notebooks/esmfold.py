@@ -64,7 +64,18 @@ def main():
         model = torch.load("esmfold.model")
         model.cuda().requires_grad_(False)
 
-    for record in tqdm(SeqIO.parse(args.fasta_file, "fasta")):
+
+    # Read all sequences first
+    records = list(SeqIO.parse(args.fasta_file, "fasta"))
+
+    # Sort records by length of sequence
+    records.sort(key=lambda r: len(str(r.seq)))
+
+    # Now start the prediction loop with sorted records.
+
+    # Now start the prediction loop with sorted records.
+    for record in tqdm(records):
+        print(record.id)
         jobname = record.id
         sequence = str(record.seq)
         # sequence preprocessing
@@ -81,7 +92,11 @@ def main():
         seqs = sequence.split(":")
         lengths = [len(s) for s in seqs]
         length = sum(lengths)
-        #print("length", length)
+
+        existing_pdb_file_path = f"./proteins_data/{ID}/{ID}_ESM.pdb"
+        if os.path.isfile(existing_pdb_file_path):
+            print("PDB file already exists. Skipping prediction for ", ID)
+            continue  # Skip to the next record in the loop
 
         u_seqs = list(set(seqs))
         if len(seqs) == 1:

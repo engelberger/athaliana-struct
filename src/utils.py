@@ -264,7 +264,6 @@ class Protein:
         self.chimerax_path = "chimerax"
         os.makedirs(self.protein_dir, exist_ok=True)
 
-    
     def sequence_uniprot(self):
         filename = os.path.join(self.protein_dir, f"{self.uniprot_id}.fasta")
         if os.path.exists(filename):
@@ -272,7 +271,7 @@ class Protein:
                 return file.read()
         else:
             return self.download_sequence("uniprot")
-    
+
     def sequence_af2(self):
         filename = os.path.join(self.protein_dir, f"{self.uniprot_id}_AF2.fasta")
         if os.path.exists(filename):
@@ -298,21 +297,33 @@ class Protein:
             url = f"https://www.rcsb.org/fasta/entry/{self.pdb_id}"
         elif source == "AF2":
             url = f"https://alphafold.ebi.ac.uk/files/AF-{self.uniprot_id}-F1-model_v4.fasta"
-            
+
             response = requests.get(url)
             print(response.text)
-            if response.status_code == 200:                
+            if response.status_code == 200:
                 sequence = "".join(response.text.split("\n")[1:])
-                filename = os.path.join(self.protein_dir, f"{self.uniprot_id}_{source}.fasta")
+                filename = os.path.join(
+                    self.protein_dir, f"{self.uniprot_id}_{source}.fasta"
+                )
                 with open(filename, "w") as file:
                     file.write(sequence)
                 return sequence
-        
 
-    def predict_structure_with_esm(self, fasta_file, pdb_folder, model_dir=None, num_recycles=None, 
-                                   max_tokens_per_batch=None, chunk_size=None, cpu_only=False, cpu_offload=False):
+    def predict_structure_with_esm(
+        self,
+        fasta_file,
+        pdb_folder,
+        model_dir=None,
+        num_recycles=None,
+        max_tokens_per_batch=None,
+        chunk_size=None,
+        cpu_only=False,
+        cpu_offload=False,
+    ):
         # esm-fold command path
-        esm_fold_command = "/home/sc.uni-leipzig.de/nq194gori/micromamba/envs/esmfold/bin/esm-fold"
+        esm_fold_command = (
+            "/home/sc.uni-leipzig.de/nq194gori/micromamba/envs/esmfold/bin/esm-fold"
+        )
 
         # assemble the command
         cmd = [esm_fold_command, "-i", fasta_file, "-o", pdb_folder]
@@ -333,11 +344,12 @@ class Protein:
 
         # Run the command and capture output
         import subprocess
+
         print(cmd)
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, stderr = process.communicate()
-        print(stdout.decode('utf-8'))
-        print(stderr.decode('utf-8'))
+        print(stdout.decode("utf-8"))
+        print(stderr.decode("utf-8"))
         if process.returncode != 0:
             raise OSError(f"Command failed: {cmd}, error: {stderr.decode('utf-8')}")
 
@@ -347,8 +359,11 @@ class Protein:
         if not os.path.exists(pdb_file):
             raise FileNotFoundError(f"PDB file not found: {pdb_file}")
         import shutil
+
         # Move and rename the pdb file to the protein directory
-        shutil.move(pdb_file, os.path.join(self.protein_dir, f"{self.uniprot_id}_ESM.pdb"))
+        shutil.move(
+            pdb_file, os.path.join(self.protein_dir, f"{self.uniprot_id}_ESM.pdb")
+        )
         # update the pdb file path
         pdb_file = os.path.join(self.protein_dir, f"{self.uniprot_id}_ESM.pdb")
         # Remove the pdb folder
@@ -405,21 +420,27 @@ class Protein:
 
         return file_path
 
-    def calculate_rmsd_chimeraX(self):
+    def calculate_rmsd_chimeraX(self, pdb_source: str):
         """
         Calculate RMSD between AF2 and RCSB structures using ChimeraX
         """
         import json
 
         # Download PDB structures
-        af2_pdb_path = self.download_pdb_structures("AF2")
+        if pdb_source == "ESM":
+            # TODO update if ESM model does not exist it should be predicted
+            second_pdb_path = os.path.join(
+                self.protein_dir, f"{self.uniprot_id}_{pdb_source}.pdb"
+            )
+        if pdb_source == "AF2":
+            second_pdb_path = self.download_pdb_structures("AF2")
         rcsb_pdb_path = self.download_pdb_structures("RCSB")
 
         # If the pdb files exist, calculate RMSD
-        if os.path.exists(af2_pdb_path) and os.path.exists(rcsb_pdb_path):
+        if os.path.exists(second_pdb_path) and os.path.exists(rcsb_pdb_path):
             # Calculate RMSD with matchmaker
             # chimerax --offscreen --script "matchmaker.py --dir /home/iwe30/Remote/nq194gori/github/athaliana-struct/notebooks/proteins_data/P93311 --file_1 P93311_AF2.cif --file_2 P93311_RCSB.cif --output matchmaker_full_P93311.html"
-            cmd = f"{self.chimerax_path} --script '../src/matchmaker.py --dir {self.protein_dir} --file_1 {af2_pdb_path} --file_2 {rcsb_pdb_path} --output matchmaker_full_{self.uniprot_id}.html'"
+            cmd = f"{self.chimerax_path} --script '../src/matchmaker.py --dir {self.protein_dir} --file_1 {second_pdb_path} --file_2 {rcsb_pdb_path} --output matchmaker_full_{self.uniprot_id}.html'"
             # Save the command to a file
             with open(
                 os.path.join(self.protein_dir, f"matchmaker_full_{self.uniprot_id}.sh"),
